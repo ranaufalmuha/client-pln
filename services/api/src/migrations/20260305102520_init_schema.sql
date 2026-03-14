@@ -1,0 +1,56 @@
+-- UNIT CATEGORIES
+CREATE TABLE unit_categories (
+    id SERIAL PRIMARY KEY,
+    key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- UNITS
+CREATE TABLE units (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    category_id INTEGER NOT NULL REFERENCES unit_categories (id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_units_category_id_name ON units(category_id, name);
+
+-- USERS
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- BAYS
+CREATE TABLE bays (
+    id SERIAL PRIMARY KEY,
+    unit_id INTEGER NOT NULL REFERENCES units (id) ON DELETE RESTRICT,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_bays_unit_name ON bays(unit_id, name);
+
+-- BEBANS
+CREATE TABLE bebans (
+    id SERIAL PRIMARY KEY,
+    bay_id INTEGER REFERENCES bays (id) ON DELETE SET NULL,
+    kv DOUBLE PRECISION NOT NULL,
+    a DOUBLE PRECISION NOT NULL,
+    mw DOUBLE PRECISION NOT NULL,
+    mvar DOUBLE PRECISION NOT NULL,
+    percentage DOUBLE PRECISION NOT NULL,
+    tap DOUBLE PRECISION,
+    measured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
