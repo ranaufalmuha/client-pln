@@ -32,7 +32,7 @@ export default function KirimWhatsAppOmgiPage() {
   const [note, setNote] = useState("");
 
   const message = useMemo(
-    () => `*Laporan OMGI ${appEnv.reportRegionName}*
+    () => `*Laporan OMGI*
 
 Tanggal: ${formatDateLabel(date)}
 Jam: ${time} ${appEnv.reportTimezoneLabel}

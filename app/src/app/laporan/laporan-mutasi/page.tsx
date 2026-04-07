@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import * as React from "react";
 
 import { DashboardShell } from "@/shared/components/dashboard-shell";
 import { Button } from "@/shared/components/ui/button";
@@ -14,17 +14,44 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { getUnitCategories } from "@/shared/lib/api";
 import { useAppRouter } from "@/shared/lib/app-router";
-import { appEnv } from "@/shared/lib/env";
-const unitOptions = appEnv.reportMutasiUnits;
 
 export default function LaporanMutasiPage() {
-  const { navigate } = useAppRouter();
-  const [unit, setUnit] = useState(unitOptions[0]);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const { navigate, token } = useAppRouter();
+  const [unitOptions, setUnitOptions] = React.useState<string[]>([]);
+  const [unit, setUnit] = React.useState("");
+  const [dateFrom, setDateFrom] = React.useState("");
+  const [dateTo, setDateTo] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const sanitizedUnit = unit.split("/").join("-");
+  const loadUnitCategories = React.useCallback(async () => {
+    if (!token) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const categories = await getUnitCategories(token);
+      const options = categories.map((item) => item.name);
+      setUnitOptions(options);
+      setUnit((current) => (current ? current : options[0] ?? ""));
+    } catch (unknownError) {
+      const message =
+        unknownError instanceof Error ? unknownError.message : "Gagal memuat kategori unit";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  React.useEffect(() => {
+    void loadUnitCategories();
+  }, [loadUnitCategories]);
+
+  const sanitizedUnit = (unit || "unit").split("/").join("-");
   const fileName = `laporan-mutasi-${sanitizedUnit}-${dateFrom || "start"}-${dateTo || "end"}.pdf`;
 
   return (
@@ -44,8 +71,8 @@ export default function LaporanMutasiPage() {
             <div className="space-y-2">
               <Label>Unit</Label>
               <Select value={unit} onValueChange={setUnit}>
-                <SelectTrigger>
-                  <SelectValue />
+                <SelectTrigger disabled={isLoading || unitOptions.length === 0}>
+                  <SelectValue placeholder={isLoading ? "Loading..." : "Pilih unit"} />
                 </SelectTrigger>
                 <SelectContent>
                   {unitOptions.map((item) => (
@@ -55,6 +82,7 @@ export default function LaporanMutasiPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {error ? <p className="text-xs text-destructive">{error}</p> : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="mutasi-from">Tanggal Awal</Label>

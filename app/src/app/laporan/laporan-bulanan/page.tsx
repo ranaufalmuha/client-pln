@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import * as React from "react";
 
 import { DashboardShell } from "@/shared/components/dashboard-shell";
 import { Button } from "@/shared/components/ui/button";
@@ -14,15 +14,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { getUnitCategories } from "@/shared/lib/api";
 import { useAppRouter } from "@/shared/lib/app-router";
-import { appEnv } from "@/shared/lib/env";
-const regionOptions = appEnv.reportBulananRegions;
 
 export default function LaporanBulananPage() {
-  const { navigate } = useAppRouter();
-  const [region, setRegion] = useState(regionOptions[0]);
-  const [month, setMonth] = useState("");
-  const [reportNumber, setReportNumber] = useState("");
+  const { navigate, token } = useAppRouter();
+  const [regionOptions, setRegionOptions] = React.useState<string[]>([]);
+  const [region, setRegion] = React.useState("");
+  const [month, setMonth] = React.useState("");
+  const [reportNumber, setReportNumber] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const loadRegionOptions = React.useCallback(async () => {
+    if (!token) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const categories = await getUnitCategories(token);
+      const options = categories.map((item) => item.name);
+      setRegionOptions(options);
+      setRegion((current) => (current ? current : options[0] ?? ""));
+    } catch (unknownError) {
+      const message =
+        unknownError instanceof Error ? unknownError.message : "Gagal memuat kategori unit";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  React.useEffect(() => {
+    void loadRegionOptions();
+  }, [loadRegionOptions]);
 
   return (
     <DashboardShell title="Laporan Bulanan">
@@ -39,10 +66,10 @@ export default function LaporanBulananPage() {
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Region</Label>
+              <Label>Kategori Unit</Label>
               <Select value={region} onValueChange={setRegion}>
-                <SelectTrigger>
-                  <SelectValue />
+                <SelectTrigger disabled={isLoading || regionOptions.length === 0}>
+                  <SelectValue placeholder={isLoading ? "Loading..." : "Pilih kategori"} />
                 </SelectTrigger>
                 <SelectContent>
                   {regionOptions.map((item) => (
@@ -52,6 +79,7 @@ export default function LaporanBulananPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {error ? <p className="text-xs text-destructive">{error}</p> : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="bulanan-month">Periode</Label>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import * as React from "react";
 
 import { DashboardShell } from "@/shared/components/dashboard-shell";
 import { Button } from "@/shared/components/ui/button";
@@ -14,15 +14,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { getBays, type Bay } from "@/shared/lib/api";
 import { useAppRouter } from "@/shared/lib/app-router";
-import { appEnv } from "@/shared/lib/env";
-const unitOptions = appEnv.reportPrintUnits;
 
 export default function PrintBebanPage() {
-  const { navigate } = useAppRouter();
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("10:00");
-  const [unit, setUnit] = useState(unitOptions[0]);
+  const { navigate, token } = useAppRouter();
+  const [date, setDate] = React.useState("");
+  const [time, setTime] = React.useState("10:00");
+  const [bays, setBays] = React.useState<Bay[]>([]);
+  const [selectedBayId, setSelectedBayId] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const loadBays = React.useCallback(async () => {
+    if (!token) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await getBays(token);
+      setBays(response);
+      setSelectedBayId((current) => (current ? current : String(response[0]?.id ?? "")));
+    } catch (unknownError) {
+      const message = unknownError instanceof Error ? unknownError.message : "Gagal memuat bay";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  React.useEffect(() => {
+    void loadBays();
+  }, [loadBays]);
 
   return (
     <DashboardShell title="Print Beban">
@@ -48,18 +73,19 @@ export default function PrintBebanPage() {
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Bay</Label>
-              <Select value={unit} onValueChange={setUnit}>
-                <SelectTrigger>
-                  <SelectValue />
+              <Select value={selectedBayId} onValueChange={setSelectedBayId}>
+                <SelectTrigger disabled={isLoading || bays.length === 0}>
+                  <SelectValue placeholder={isLoading ? "Loading..." : "Pilih bay"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {unitOptions.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
+                  {bays.map((item) => (
+                    <SelectItem key={item.id} value={String(item.id)}>
+                      {item.unitName} / {item.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {error ? <p className="text-xs text-destructive">{error}</p> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2 md:col-span-2">
               <Button type="button">Preview</Button>

@@ -205,7 +205,7 @@ export default function KirimWhatsAppTeganganPage() {
   const gitetMessage = React.useMemo(
     () =>
       buildMessage(
-        `Laporan Tegangan GITET ${appEnv.reportGitetName}`,
+        "Laporan Tegangan GITET",
         selectedDate,
         selectedTime,
         gitetFields,
@@ -217,7 +217,7 @@ export default function KirimWhatsAppTeganganPage() {
   const giMessage = React.useMemo(
     () =>
       buildMessage(
-        `Laporan Tegangan GI ${appEnv.reportRegionName}`,
+        "Laporan Tegangan GI",
         selectedDate,
         selectedTime,
         giFields,
