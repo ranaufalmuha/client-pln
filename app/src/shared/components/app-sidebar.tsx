@@ -2,7 +2,6 @@ import * as React from "react";
 import {
   IconChartBar,
   IconDashboard,
-  IconInnerShadowTop,
   IconListDetails,
   IconReport,
   IconShieldLock,
@@ -78,10 +77,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton
               type="button"
-              className="data-[slot=sidebar-menu-button]:p-1.5!"
+              className="data-[slot=sidebar-menu-button]:p-2! h-10"
               onClick={() => navigate("/")}
             >
-              <IconInnerShadowTop className="size-5!" />
+              <span className="text-xl">⚡️</span>
               <span className="text-base font-semibold">{appEnv.appBrandName}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>

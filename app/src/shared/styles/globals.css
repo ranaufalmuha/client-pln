@@ -139,3 +139,31 @@
   padding-bottom: var(--safe-area-bottom);
   padding-left: var(--safe-area-left);
 }
+
+/* Mobile performance optimizations */
+@media (max-width: 768px) {
+  /* Reduce motion for better mobile performance */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.15s !important;
+  }
+  
+  /* Optimize sidebar on mobile */
+  [data-slot="sidebar"] {
+    will-change: transform;
+    transform: translateZ(0);
+  }
+  
+  /* Simplify shadows on mobile for better performance */
+  [data-slot="sidebar-menu-button"] {
+    box-shadow: none !important;
+  }
+  
+  /* Optimize sheet animations */
+  [data-state="open"][data-slot="sheet-content"] {
+    animation: none !important;
+  }
+}
