@@ -36,4 +36,15 @@ check:
 frontend-android:
     cd app && pnpm tauri android dev
 
+# Build Android release APK (signed and ready to share)
+android-build:
+    cd app && pnpm tauri android build
+
+# Build Android APK for specific architectures
+android-build-apk:
+    cd app && pnpm tauri android build --apk
+
+# Install the release APK to connected device
+android-install:
+    adb install -r app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
 

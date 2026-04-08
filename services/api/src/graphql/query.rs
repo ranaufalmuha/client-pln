@@ -96,10 +96,21 @@ impl QueryRoot {
         Ok(BayRepository::find_by_id(pool, id).await?)
     }
 
-    async fn bebans(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<Beban>> {
+    async fn bebans(
+        &self,
+        ctx: &Context<'_>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> async_graphql::Result<Vec<Beban>> {
         let _ = require_auth(ctx)?;
         let pool = ctx.data::<PgPool>()?;
-        Ok(BebanRepository::find_all(pool).await?)
+        Ok(BebanRepository::find_all(pool, limit, offset).await?)
+    }
+
+    async fn bebans_count(&self, ctx: &Context<'_>) -> async_graphql::Result<i64> {
+        let _ = require_auth(ctx)?;
+        let pool = ctx.data::<PgPool>()?;
+        Ok(BebanRepository::count_all(pool).await?)
     }
 
     async fn beban(&self, ctx: &Context<'_>, id: i32) -> async_graphql::Result<Beban> {

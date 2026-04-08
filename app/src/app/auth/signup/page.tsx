@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
 import { signupUser } from "@/shared/lib/api";
 import { Button } from "@/shared/components/ui/button";
@@ -18,28 +20,27 @@ export default function SignUpPage() {
   const { navigate, signIn } = useAppRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(null);
     setIsSubmitting(true);
 
     try {
       const payload = await signupUser(email.trim(), password);
       signIn({ token: payload.token, user: payload.user });
+      toast.success("Akun berhasil dibuat!");
     } catch (unknownError) {
       const message =
         unknownError instanceof Error ? unknownError.message : "Failed to create account";
-      setError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6 py-12">
+    <div className="flex min-h-full items-center justify-center px-6 py-8">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-2">
           <CardTitle className="text-2xl">Create account</CardTitle>
@@ -69,9 +70,15 @@ export default function SignUpPage() {
                 required
               />
             </div>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Creating..." : "Create account"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create account"
+              )}
             </Button>
           </form>
         </CardContent>

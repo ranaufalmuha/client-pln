@@ -282,5 +282,32 @@ pub async fn ensure_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // Performance indexes for frequently queried columns
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_bebans_measured_at ON bebans(measured_at DESC)"
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_bebans_bay_id ON bebans(bay_id)"
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_bebans_measured_at_bay_id ON bebans(measured_at DESC, bay_id)"
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_bays_unit_id ON bays(unit_id)"
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

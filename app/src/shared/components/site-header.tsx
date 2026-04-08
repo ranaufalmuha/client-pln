@@ -2,6 +2,7 @@ import { Button } from "./ui/button"
 import { Separator } from "./ui/separator"
 import { SidebarTrigger } from "./ui/sidebar"
 import { useAppRouter } from "@/shared/lib/app-router";
+import { OfflineStatusIndicator } from "./offline-status";
 
 type SiteHeaderProps = {
   title: string;
@@ -20,6 +21,7 @@ export function SiteHeader({ title }: SiteHeaderProps) {
         />
         <h1 className="text-base font-medium">{title}</h1>
         <div className="ml-auto flex items-center gap-2">
+          <OfflineStatusIndicator />
           {isAuthenticated ? (
             <Button type="button" variant="ghost" size="sm" onClick={signOut}>
               Log out

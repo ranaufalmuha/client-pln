@@ -28,9 +28,28 @@ LEFT JOIN unit_categories categories ON categories.id = units.category_id
 pub struct BebanRepository;
 
 impl BebanRepository {
-    pub async fn find_all(pool: &PgPool) -> Result<Vec<Beban>, sqlx::Error> {
-        let query = format!("{BEBAN_SELECT} ORDER BY b.measured_at DESC, b.id DESC");
-        sqlx::query_as::<_, Beban>(&query).fetch_all(pool).await
+    pub async fn find_all(
+        pool: &PgPool,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<Beban>, sqlx::Error> {
+        let limit = limit.unwrap_or(100).min(1000); // Cap at 1000 to prevent abuse
+        let offset = offset.unwrap_or(0);
+        let query = format!(
+            "{BEBAN_SELECT} ORDER BY b.measured_at DESC, b.id DESC LIMIT $1 OFFSET $2"
+        );
+        sqlx::query_as::<_, Beban>(&query)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(pool)
+            .await
+    }
+
+    pub async fn count_all(pool: &PgPool) -> Result<i64, sqlx::Error> {
+        let result = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM bebans")
+            .fetch_one(pool)
+            .await?;
+        Ok(result)
     }
 
     pub async fn find_by_id(pool: &PgPool, id: i32) -> Result<Beban, sqlx::Error> {

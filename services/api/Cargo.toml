@@ -20,4 +20,4 @@ tracing-subscriber = "0.3.22"
 validator = { version = "0.20.0", features = ["derive"] }
 argon2 = "0.5.3"
 password-hash = "0.5.0"
-tower-http = { version = "0.6.2", features = ["cors"] }
+tower-http = { version = "0.6.2", features = ["cors", "compression-gzip", "compression-deflate", "compression-br"] }

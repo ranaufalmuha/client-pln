@@ -315,8 +315,8 @@ const DELETE_BAY_MUTATION = `
 `;
 
 const BEBANS_QUERY = `
-  query Bebans {
-    bebans {
+  query Bebans($limit: Int, $offset: Int) {
+    bebans(limit: $limit, offset: $offset) {
       id
       bayId
       bayName
@@ -333,6 +333,12 @@ const BEBANS_QUERY = `
       tap
       measuredAt
     }
+  }
+`;
+
+const BEBANS_COUNT_QUERY = `
+  query BebansCount {
+    bebansCount
   }
 `;
 
@@ -530,9 +536,17 @@ export async function deleteBay(token: string, id: number): Promise<boolean> {
   return data.deleteBay;
 }
 
-export async function getBebans(token: string): Promise<Beban[]> {
-  const data = await graphqlRequest<{ bebans: Beban[] }>(BEBANS_QUERY, {}, token);
+export async function getBebans(token: string, limit?: number, offset?: number): Promise<Beban[]> {
+  const variables: { limit?: number; offset?: number } = {};
+  if (limit !== undefined) variables.limit = limit;
+  if (offset !== undefined) variables.offset = offset;
+  const data = await graphqlRequest<{ bebans: Beban[] }>(BEBANS_QUERY, variables, token);
   return data.bebans;
+}
+
+export async function getBebansCount(token: string): Promise<number> {
+  const data = await graphqlRequest<{ bebansCount: number }>(BEBANS_COUNT_QUERY, {}, token);
+  return data.bebansCount;
 }
 
 export async function createBeban(token: string, input: CreateBebanInput): Promise<Beban> {

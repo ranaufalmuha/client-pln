@@ -14,6 +14,7 @@ import {
   type Navigate,
   useAppRouter,
 } from "./shared/lib/app-router";
+import { OfflineProvider } from "./shared/lib/offline-hooks";
 
 type RouteComponent = React.ComponentType;
 type PageModule = {
@@ -280,7 +281,9 @@ export default function App() {
   return (
     <AppLayout>
       <AppRouterProvider value={routerValue}>
-        <Page />
+        <OfflineProvider token={token}>
+          <Page />
+        </OfflineProvider>
       </AppRouterProvider>
     </AppLayout>
   );

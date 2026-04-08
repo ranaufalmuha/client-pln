@@ -3,6 +3,7 @@ import {
   IconChartBar,
   IconDashboard,
   IconListDetails,
+  IconRefresh,
   IconReport,
   IconShieldLock,
 } from "@tabler/icons-react";
@@ -38,6 +39,11 @@ const data = {
       title: "Gangguan",
       url: "/gangguan",
       icon: IconListDetails,
+    },
+    {
+      title: "Sync",
+      url: "/sync",
+      icon: IconRefresh,
     },
   ],
   documents: [

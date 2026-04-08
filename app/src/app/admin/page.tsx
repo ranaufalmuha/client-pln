@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
 import {
   createBay,
@@ -15,6 +17,7 @@ import {
   deleteUser,
   getBays,
   getBebans,
+  getBebansCount,
   getUnitCategories,
   getUnits,
   getUsers,
@@ -95,6 +98,16 @@ function asNumber(value: string, field: string) {
   return parsed;
 }
 
+// Generate key from name: "Penghantar GITET" -> "penghantar-gitet"
+function generateKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 export default function AdminPage() {
   const { navigate, token, currentUser } = useAppRouter();
   const isAdmin = currentUser?.isAdmin ?? false;
@@ -105,13 +118,14 @@ export default function AdminPage() {
   const [bays, setBays] = React.useState<Bay[]>([]);
   const [bebans, setBebans] = React.useState<Beban[]>([]);
   const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+
+  // Loading states for individual actions
+  const [loadingActions, setLoadingActions] = React.useState<Record<string, boolean>>({});
 
   const [newUserEmail, setNewUserEmail] = React.useState("");
   const [newUserPassword, setNewUserPassword] = React.useState("");
   const [newUserAdmin, setNewUserAdmin] = React.useState(false);
 
-  const [newCategoryKey, setNewCategoryKey] = React.useState("");
   const [newCategoryName, setNewCategoryName] = React.useState("");
   const [editingCategoryId, setEditingCategoryId] = React.useState<number | null>(null);
   const [editingCategoryKey, setEditingCategoryKey] = React.useState("");
@@ -132,6 +146,18 @@ export default function AdminPage() {
   const [createBebanForm, setCreateBebanForm] = React.useState<BebanForm>(defaultBebanForm());
   const [editBebanForm, setEditBebanForm] = React.useState<BebanForm | null>(null);
 
+  // Pagination state for bebans
+  const BEBANS_PAGE_SIZE = 50;
+  const [bebansPage, setBebansPage] = React.useState(0);
+  const [bebansTotalCount, setBebansTotalCount] = React.useState(0);
+  const [bebansHasMore, setBebansHasMore] = React.useState(false);
+
+  const setActionLoading = (key: string, value: boolean) => {
+    setLoadingActions(prev => ({ ...prev, [key]: value }));
+  };
+
+  const isActionLoading = (key: string) => loadingActions[key] ?? false;
+
   const getBaysByUnit = React.useCallback(
     (unitId: string) => {
       if (!unitId) {
@@ -148,34 +174,63 @@ export default function AdminPage() {
     }
 
     setLoading(true);
-    setError(null);
     try {
+      // Load reference data (users, categories, units, bays) without pagination
       const [
         fetchedUsers,
         fetchedCategories,
         fetchedUnits,
         fetchedBays,
-        fetchedBebans,
       ] = await Promise.all([
         getUsers(token),
         getUnitCategories(token),
         getUnits(token),
         getBays(token),
-        getBebans(token),
       ]);
       setUsers(fetchedUsers);
       setUnitCategories(fetchedCategories);
       setUnits(fetchedUnits);
       setBays(fetchedBays);
+
+      // Load paginated bebans data
+      const [fetchedBebans, totalCount] = await Promise.all([
+        getBebans(token, BEBANS_PAGE_SIZE, 0),
+        getBebansCount(token),
+      ]);
       setBebans(fetchedBebans);
+      setBebansTotalCount(totalCount);
+      setBebansHasMore(fetchedBebans.length < totalCount);
+      setBebansPage(0);
     } catch (unknownError) {
       const message =
         unknownError instanceof Error ? unknownError.message : "Gagal memuat data admin";
-      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   }, [isAdmin, token]);
+
+  const loadMoreBebans = React.useCallback(async () => {
+    if (!token || !isAdmin) {
+      return;
+    }
+
+    const nextPage = bebansPage + 1;
+    setActionLoading('loadMoreBebans', true);
+    try {
+      const fetchedBebans = await getBebans(token, BEBANS_PAGE_SIZE, nextPage * BEBANS_PAGE_SIZE);
+      setBebans((current) => [...current, ...fetchedBebans]);
+      setBebansPage(nextPage);
+      const totalLoaded = (nextPage + 1) * BEBANS_PAGE_SIZE;
+      setBebansHasMore(totalLoaded < bebansTotalCount);
+    } catch (unknownError) {
+      const message =
+        unknownError instanceof Error ? unknownError.message : "Gagal memuat beban tambahan";
+      toast.error(message);
+    } finally {
+      setActionLoading('loadMoreBebans', false);
+    }
+  }, [token, isAdmin, bebansPage, bebansTotalCount]);
 
   React.useEffect(() => {
     void loadData();
@@ -206,11 +261,9 @@ export default function AdminPage() {
   }, [bays, newBayUnitId, newUnitCategoryId, unitCategories, units]);
 
   const handleCreateUser = async () => {
-    if (!token) {
-      return;
-    }
-
-    setError(null);
+    if (!token) return;
+    setActionLoading('createUser', true);
+    
     try {
       const created = await createUser(token, {
         email: newUserEmail.trim(),
@@ -221,18 +274,19 @@ export default function AdminPage() {
       setNewUserEmail("");
       setNewUserPassword("");
       setNewUserAdmin(false);
+      toast.success("User berhasil dibuat!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal membuat user";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading('createUser', false);
     }
   };
 
   const handleUpdateUserRole = async (user: AuthUser, nextAdmin: boolean) => {
-    if (!token) {
-      return;
-    }
-
-    setError(null);
+    if (!token) return;
+    setActionLoading(`updateUser-${user.id}`, true);
+    
     try {
       const updated = await updateUser(token, {
         id: user.id,
@@ -240,54 +294,62 @@ export default function AdminPage() {
         isAdmin: nextAdmin,
       });
       setUsers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      toast.success("Role user diperbarui!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal update user";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading(`updateUser-${user.id}`, false);
     }
   };
 
   const handleDeleteUser = async (id: number) => {
-    if (!token) {
-      return;
-    }
-
-    setError(null);
+    if (!token) return;
+    setActionLoading(`deleteUser-${id}`, true);
+    
     try {
       await deleteUser(token, id);
       setUsers((current) => current.filter((item) => item.id !== id));
+      toast.success("User berhasil dihapus!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal hapus user";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading(`deleteUser-${id}`, false);
     }
   };
 
   const handleCreateCategory = async () => {
-    if (!token) {
-      return;
-    }
-
-    setError(null);
+    if (!token) return;
+    setActionLoading('createCategory', true);
+    
     try {
+      const key = generateKey(newCategoryName.trim());
+      if (!key) {
+        toast.error("Nama kategori tidak valid");
+        return;
+      }
+      
       const created = await createUnitCategory(token, {
-        key: newCategoryKey.trim(),
+        key,
         name: newCategoryName.trim(),
       });
       setUnitCategories((current) => [...current, created]);
-      setNewCategoryKey("");
       setNewCategoryName("");
+      toast.success("Kategori berhasil dibuat!");
     } catch (unknownError) {
       const message =
         unknownError instanceof Error ? unknownError.message : "Gagal membuat kategori";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading('createCategory', false);
     }
   };
 
   const handleSaveCategory = async () => {
-    if (!token || editingCategoryId === null) {
-      return;
-    }
-
-    setError(null);
+    if (!token || editingCategoryId === null) return;
+    setActionLoading('saveCategory', true);
+    
     try {
       const updated = await updateUnitCategory(token, {
         id: editingCategoryId,
@@ -333,34 +395,36 @@ export default function AdminPage() {
       setEditingCategoryId(null);
       setEditingCategoryKey("");
       setEditingCategoryName("");
+      toast.success("Kategori berhasil diperbarui!");
     } catch (unknownError) {
       const message =
         unknownError instanceof Error ? unknownError.message : "Gagal update kategori";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading('saveCategory', false);
     }
   };
 
   const handleDeleteCategory = async (id: number) => {
-    if (!token) {
-      return;
-    }
-
-    setError(null);
+    if (!token) return;
+    setActionLoading(`deleteCategory-${id}`, true);
+    
     try {
       await deleteUnitCategory(token, id);
       setUnitCategories((current) => current.filter((item) => item.id !== id));
+      toast.success("Kategori berhasil dihapus!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal hapus kategori";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading(`deleteCategory-${id}`, false);
     }
   };
 
   const handleCreateUnit = async () => {
-    if (!token || !newUnitCategoryId) {
-      return;
-    }
-
-    setError(null);
+    if (!token || !newUnitCategoryId) return;
+    setActionLoading('createUnit', true);
+    
     try {
       const created = await createUnit(token, {
         name: newUnitName.trim(),
@@ -368,18 +432,19 @@ export default function AdminPage() {
       });
       setUnits((current) => [...current, created]);
       setNewUnitName("");
+      toast.success("Unit berhasil dibuat!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal membuat unit";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading('createUnit', false);
     }
   };
 
   const handleSaveUnit = async () => {
-    if (!token || editingUnitId === null || !editingUnitCategoryId) {
-      return;
-    }
-
-    setError(null);
+    if (!token || editingUnitId === null || !editingUnitCategoryId) return;
+    setActionLoading('saveUnit', true);
+    
     try {
       const updated = await updateUnit(token, {
         id: editingUnitId,
@@ -416,34 +481,36 @@ export default function AdminPage() {
       setEditingUnitId(null);
       setEditingUnitName("");
       setEditingUnitCategoryId("");
+      toast.success("Unit berhasil diperbarui!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal update unit";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading('saveUnit', false);
     }
   };
 
   const handleDeleteUnit = async (id: number) => {
-    if (!token) {
-      return;
-    }
-
-    setError(null);
+    if (!token) return;
+    setActionLoading(`deleteUnit-${id}`, true);
+    
     try {
       await deleteUnit(token, id);
       setUnits((current) => current.filter((item) => item.id !== id));
       setBays((current) => current.filter((item) => item.unitId !== id));
+      toast.success("Unit berhasil dihapus!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal hapus unit";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading(`deleteUnit-${id}`, false);
     }
   };
 
   const handleCreateBay = async () => {
-    if (!token || !newBayUnitId) {
-      return;
-    }
-
-    setError(null);
+    if (!token || !newBayUnitId) return;
+    setActionLoading('createBay', true);
+    
     try {
       const created = await createBay(token, {
         unitId: Number(newBayUnitId),
@@ -451,18 +518,19 @@ export default function AdminPage() {
       });
       setBays((current) => [...current, created]);
       setNewBayName("");
+      toast.success("Bay berhasil dibuat!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal membuat bay";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading('createBay', false);
     }
   };
 
   const handleSaveBay = async () => {
-    if (!token || editingBayId === null || !editingBayUnitId) {
-      return;
-    }
-
-    setError(null);
+    if (!token || editingBayId === null || !editingBayUnitId) return;
+    setActionLoading('saveBay', true);
+    
     try {
       const updated = await updateBay(token, {
         id: editingBayId,
@@ -473,41 +541,44 @@ export default function AdminPage() {
       setEditingBayId(null);
       setEditingBayName("");
       setEditingBayUnitId("");
+      toast.success("Bay berhasil diperbarui!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal update bay";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading('saveBay', false);
     }
   };
 
   const handleDeleteBay = async (id: number) => {
-    if (!token) {
-      return;
-    }
-
-    setError(null);
+    if (!token) return;
+    setActionLoading(`deleteBay-${id}`, true);
+    
     try {
       await deleteBay(token, id);
       setBays((current) => current.filter((item) => item.id !== id));
       setBebans((current) =>
         current.map((item) => (item.bayId === id ? { ...item, bayId: null, bayName: null } : item)),
       );
+      toast.success("Bay berhasil dihapus!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal hapus bay";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading(`deleteBay-${id}`, false);
     }
   };
 
   const handleCreateBeban = async () => {
-    if (!token) {
-      return;
-    }
-
+    if (!token) return;
+    
     if (!createBebanForm.bayId) {
-      setError("Pilih bay terlebih dahulu");
+      toast.error("Pilih bay terlebih dahulu");
       return;
     }
 
-    setError(null);
+    setActionLoading('createBeban', true);
+    
     try {
       const created = await createBeban(token, {
         bayId: Number(createBebanForm.bayId),
@@ -525,18 +596,19 @@ export default function AdminPage() {
         unitId: current.unitId,
         bayId: current.bayId,
       }));
+      toast.success("Beban berhasil dibuat!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal membuat beban";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading('createBeban', false);
     }
   };
 
   const handleSaveBeban = async () => {
-    if (!token || !editBebanForm?.id || !editBebanForm.bayId) {
-      return;
-    }
-
-    setError(null);
+    if (!token || !editBebanForm?.id || !editBebanForm.bayId) return;
+    setActionLoading('saveBeban', true);
+    
     try {
       const updated = await updateBeban(token, {
         id: editBebanForm.id,
@@ -551,27 +623,31 @@ export default function AdminPage() {
       });
       setBebans((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setEditBebanForm(null);
+      toast.success("Beban berhasil diperbarui!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal update beban";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading('saveBeban', false);
     }
   };
 
   const handleDeleteBeban = async (id: number) => {
-    if (!token) {
-      return;
-    }
-
-    setError(null);
+    if (!token) return;
+    setActionLoading(`deleteBeban-${id}`, true);
+    
     try {
       await deleteBeban(token, id);
       setBebans((current) => current.filter((item) => item.id !== id));
       if (editBebanForm?.id === id) {
         setEditBebanForm(null);
       }
+      toast.success("Beban berhasil dihapus!");
     } catch (unknownError) {
       const message = unknownError instanceof Error ? unknownError.message : "Gagal hapus beban";
-      setError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading(`deleteBeban-${id}`, false);
     }
   };
 
@@ -598,11 +674,21 @@ export default function AdminPage() {
     <DashboardShell title="Admin">
       <div className="space-y-4 px-4 lg:px-6">
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" onClick={() => void loadData()}>
-            Refresh
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={() => void loadData()}
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              "Refresh"
+            )}
           </Button>
-          {loading ? <p className="text-sm text-muted-foreground">Loading...</p> : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </div>
 
         <Tabs defaultValue="users" className="gap-4">
@@ -638,7 +724,14 @@ export default function AdminPage() {
                   />
                   Is Admin
                 </label>
-                <Button type="button" onClick={() => void handleCreateUser()}>
+                <Button 
+                  type="button" 
+                  onClick={() => void handleCreateUser()}
+                  disabled={isActionLoading('createUser')}
+                >
+                  {isActionLoading('createUser') ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
                   Create
                 </Button>
               </CardContent>
@@ -665,6 +758,7 @@ export default function AdminPage() {
                           onCheckedChange={(checked) =>
                             void handleUpdateUserRole(user, Boolean(checked))
                           }
+                          disabled={isActionLoading(`updateUser-${user.id}`)}
                         />
                         Admin
                       </label>
@@ -673,8 +767,13 @@ export default function AdminPage() {
                         variant="destructive"
                         size="sm"
                         onClick={() => void handleDeleteUser(user.id)}
+                        disabled={isActionLoading(`deleteUser-${user.id}`)}
                       >
-                        Delete
+                        {isActionLoading(`deleteUser-${user.id}`) ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Delete"
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -688,20 +787,27 @@ export default function AdminPage() {
               <CardHeader>
                 <CardTitle>Create Category</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-3">
+              <CardContent className="grid gap-3 md:grid-cols-2">
                 <Input
-                  placeholder="key (ex: penghantar-gitet)"
-                  value={newCategoryKey}
-                  onChange={(event) => setNewCategoryKey(event.target.value)}
-                />
-                <Input
-                  placeholder="name"
+                  placeholder="Category name (e.g., Penghantar GITET)"
                   value={newCategoryName}
                   onChange={(event) => setNewCategoryName(event.target.value)}
                 />
-                <Button type="button" onClick={() => void handleCreateCategory()}>
+                <Button 
+                  type="button" 
+                  onClick={() => void handleCreateCategory()}
+                  disabled={isActionLoading('createCategory') || !newCategoryName.trim()}
+                >
+                  {isActionLoading('createCategory') ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
                   Create
                 </Button>
+              </CardContent>
+              <CardContent className="pt-0">
+                <p className="text-xs text-muted-foreground">
+                  Key akan digenerate otomatis: "{newCategoryName ? generateKey(newCategoryName) : 'contoh-key'}"
+                </p>
               </CardContent>
             </Card>
 
@@ -720,10 +826,12 @@ export default function AdminPage() {
                         <Input
                           value={editingCategoryKey}
                           onChange={(event) => setEditingCategoryKey(event.target.value)}
+                          placeholder="Key"
                         />
                         <Input
                           value={editingCategoryName}
                           onChange={(event) => setEditingCategoryName(event.target.value)}
+                          placeholder="Name"
                         />
                       </div>
                     ) : (
@@ -735,8 +843,17 @@ export default function AdminPage() {
                     <div className="flex items-center gap-2">
                       {editingCategoryId === category.id ? (
                         <>
-                          <Button type="button" size="sm" onClick={() => void handleSaveCategory()}>
-                            Save
+                          <Button 
+                            type="button" 
+                            size="sm" 
+                            onClick={() => void handleSaveCategory()}
+                            disabled={isActionLoading('saveCategory')}
+                          >
+                            {isActionLoading('saveCategory') ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Save"
+                            )}
                           </Button>
                           <Button
                             type="button"
@@ -770,8 +887,13 @@ export default function AdminPage() {
                         variant="destructive"
                         size="sm"
                         onClick={() => void handleDeleteCategory(category.id)}
+                        disabled={isActionLoading(`deleteCategory-${category.id}`)}
                       >
-                        Delete
+                        {isActionLoading(`deleteCategory-${category.id}`) ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Delete"
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -803,7 +925,14 @@ export default function AdminPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button type="button" onClick={() => void handleCreateUnit()}>
+                <Button 
+                  type="button" 
+                  onClick={() => void handleCreateUnit()}
+                  disabled={isActionLoading('createUnit') || !newUnitName.trim()}
+                >
+                  {isActionLoading('createUnit') ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
                   Create
                 </Button>
               </CardContent>
@@ -847,8 +976,17 @@ export default function AdminPage() {
                     <div className="flex items-center gap-2">
                       {editingUnitId === unit.id ? (
                         <>
-                          <Button type="button" size="sm" onClick={() => void handleSaveUnit()}>
-                            Save
+                          <Button 
+                            type="button" 
+                            size="sm" 
+                            onClick={() => void handleSaveUnit()}
+                            disabled={isActionLoading('saveUnit')}
+                          >
+                            {isActionLoading('saveUnit') ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Save"
+                            )}
                           </Button>
                           <Button
                             type="button"
@@ -882,8 +1020,13 @@ export default function AdminPage() {
                         variant="destructive"
                         size="sm"
                         onClick={() => void handleDeleteUnit(unit.id)}
+                        disabled={isActionLoading(`deleteUnit-${unit.id}`)}
                       >
-                        Delete
+                        {isActionLoading(`deleteUnit-${unit.id}`) ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Delete"
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -915,7 +1058,14 @@ export default function AdminPage() {
                   value={newBayName}
                   onChange={(event) => setNewBayName(event.target.value)}
                 />
-                <Button type="button" onClick={() => void handleCreateBay()}>
+                <Button 
+                  type="button" 
+                  onClick={() => void handleCreateBay()}
+                  disabled={isActionLoading('createBay') || !newBayName.trim()}
+                >
+                  {isActionLoading('createBay') ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
                   Create
                 </Button>
               </CardContent>
@@ -961,8 +1111,17 @@ export default function AdminPage() {
                     <div className="flex items-center gap-2">
                       {editingBayId === bay.id ? (
                         <>
-                          <Button type="button" size="sm" onClick={() => void handleSaveBay()}>
-                            Save
+                          <Button 
+                            type="button" 
+                            size="sm" 
+                            onClick={() => void handleSaveBay()}
+                            disabled={isActionLoading('saveBay')}
+                          >
+                            {isActionLoading('saveBay') ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Save"
+                            )}
                           </Button>
                           <Button
                             type="button"
@@ -996,8 +1155,13 @@ export default function AdminPage() {
                         variant="destructive"
                         size="sm"
                         onClick={() => void handleDeleteBay(bay.id)}
+                        disabled={isActionLoading(`deleteBay-${bay.id}`)}
                       >
-                        Delete
+                        {isActionLoading(`deleteBay-${bay.id}`) ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Delete"
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -1106,7 +1270,14 @@ export default function AdminPage() {
                     }))
                   }
                 />
-                <Button type="button" onClick={() => void handleCreateBeban()}>
+                <Button 
+                  type="button" 
+                  onClick={() => void handleCreateBeban()}
+                  disabled={isActionLoading('createBeban')}
+                >
+                  {isActionLoading('createBeban') ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
                   Create
                 </Button>
               </CardContent>
@@ -1161,12 +1332,36 @@ export default function AdminPage() {
                         variant="destructive"
                         size="sm"
                         onClick={() => void handleDeleteBeban(beban.id)}
+                        disabled={isActionLoading(`deleteBeban-${beban.id}`)}
                       >
-                        Delete
+                        {isActionLoading(`deleteBeban-${beban.id}`) ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Delete"
+                        )}
                       </Button>
                     </div>
                   </div>
                 ))}
+                {bebansHasMore && (
+                  <div className="flex items-center justify-center py-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void loadMoreBebans()}
+                      disabled={isActionLoading('loadMoreBebans')}
+                    >
+                      {isActionLoading('loadMoreBebans') ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        `Load More (${bebans.length} of ${bebansTotalCount})`
+                      )}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -1279,7 +1474,14 @@ export default function AdminPage() {
                     }
                   />
                   <div className="flex items-center gap-2">
-                    <Button type="button" onClick={() => void handleSaveBeban()}>
+                    <Button 
+                      type="button" 
+                      onClick={() => void handleSaveBeban()}
+                      disabled={isActionLoading('saveBeban')}
+                    >
+                      {isActionLoading('saveBeban') ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
                       Save
                     </Button>
                     <Button
