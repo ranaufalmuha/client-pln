@@ -571,3 +571,344 @@ export async function deleteBeban(token: string, id: number): Promise<boolean> {
   const data = await graphqlRequest<{ deleteBeban: boolean }>(DELETE_BEBAN_MUTATION, { id }, token);
   return data.deleteBeban;
 }
+
+// ==================== NEW HIERARCHY API ====================
+
+// New Types
+export type Classification = {
+  id: number;
+  code: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ClassificationWithTypeCount = Classification & {
+  unitTypeCount: number;
+};
+
+export type UnitType = {
+  id: number;
+  classificationId: number;
+  code: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UnitTypeWithRelations = UnitType & {
+  classificationCode: string;
+  classificationName: string;
+  unitCount: number;
+};
+
+export type NewUnit = {
+  id: number;
+  unitTypeId: number;
+  code: string | null;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UnitWithRelations = NewUnit & {
+  unitTypeCode: string;
+  unitTypeName: string;
+  classificationId: number;
+  classificationCode: string;
+  classificationName: string;
+  bayCount: number;
+};
+
+export type NewBay = {
+  id: number;
+  unitId: number;
+  code: string | null;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BayWithRelations = NewBay & {
+  unitCode: string | null;
+  unitName: string;
+  unitTypeId: number;
+  unitTypeCode: string;
+  unitTypeName: string;
+  classificationId: number;
+  classificationCode: string;
+  classificationName: string;
+  bebanRecordCount: number;
+};
+
+export type BebanRecord = {
+  id: number;
+  userId: number;
+  bayId: number;
+  recordedAt: string;
+  kv: number;
+  currentA: number;
+  mw: number;
+  mvar: number;
+  percentage: number;
+  tap: number | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BebanRecordWithRelations = BebanRecord & {
+  userEmail: string;
+  bayCode: string | null;
+  bayName: string;
+  unitId: number;
+  unitCode: string | null;
+  unitName: string;
+  unitTypeId: number;
+  unitTypeCode: string;
+  unitTypeName: string;
+  classificationId: number;
+  classificationCode: string;
+  classificationName: string;
+};
+
+// New Input Types
+export type CreateClassificationInput = {
+  code: string;
+  name: string;
+};
+
+export type UpdateClassificationInput = {
+  id: number;
+  code?: string;
+  name?: string;
+};
+
+export type CreateUnitTypeInput = {
+  classificationId: number;
+  code: string;
+  name: string;
+};
+
+export type UpdateUnitTypeInput = {
+  id: number;
+  classificationId?: number;
+  code?: string;
+  name?: string;
+};
+
+export type CreateNewUnitInput = {
+  unitTypeId: number;
+  code?: string;
+  name: string;
+};
+
+export type UpdateNewUnitInput = {
+  id: number;
+  unitTypeId?: number;
+  code?: string;
+  name?: string;
+};
+
+export type CreateNewBayInput = {
+  unitId: number;
+  code?: string;
+  name: string;
+};
+
+export type UpdateNewBayInput = {
+  id: number;
+  unitId?: number;
+  code?: string;
+  name?: string;
+};
+
+export type CreateBebanRecordInput = {
+  bayId: number;
+  recordedAt: string;
+  kv: number;
+  currentA: number;
+  mw: number;
+  mvar: number;
+  percentage: number;
+  tap?: number;
+  note?: string;
+};
+
+export type UpdateBebanRecordInput = {
+  id: number;
+  bayId?: number;
+  recordedAt?: string;
+  kv?: number;
+  currentA?: number;
+  mw?: number;
+  mvar?: number;
+  percentage?: number;
+  tap?: number;
+  note?: string;
+};
+
+// New GraphQL Queries/Mutations
+const CLASSIFICATIONS_QUERY = `
+  query Classifications {
+    classifications {
+      id
+      code
+      name
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+const UNIT_TYPES_BY_CLASSIFICATION_QUERY = `
+  query UnitTypesByClassification($classificationId: Int!) {
+    unitTypesByClassification(classificationId: $classificationId) {
+      id
+      classificationId
+      code
+      name
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+const UNITS_BY_UNIT_TYPE_QUERY = `
+  query UnitsByUnitType($unitTypeId: Int!) {
+    unitsByUnitType(unitTypeId: $unitTypeId) {
+      id
+      unitTypeId
+      code
+      name
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+const BAYS_BY_UNIT_QUERY = `
+  query BaysByUnit($unitId: Int!) {
+    baysByUnit(unitId: $unitId) {
+      id
+      unitId
+      code
+      name
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+const BEBAN_RECORDS_QUERY = `
+  query BebanRecords($classificationId: Int, $unitTypeId: Int, $unitId: Int, $bayId: Int, $recordedAtFrom: DateTime, $recordedAtTo: DateTime) {
+    bebanRecords(classificationId: $classificationId, unitTypeId: $unitTypeId, unitId: $unitId, bayId: $bayId, recordedAtFrom: $recordedAtFrom, recordedAtTo: $recordedAtTo) {
+      id
+      userId
+      userEmail
+      bayId
+      bayCode
+      bayName
+      unitId
+      unitCode
+      unitName
+      unitTypeId
+      unitTypeCode
+      unitTypeName
+      classificationId
+      classificationCode
+      classificationName
+      recordedAt
+      kv
+      currentA
+      mw
+      mvar
+      percentage
+      tap
+      note
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+const CREATE_BEBAN_RECORD_MUTATION = `
+  mutation CreateBebanRecord($input: CreateBebanRecordInput!) {
+    createBebanRecord(input: $input) {
+      id
+      userId
+      bayId
+      recordedAt
+      kv
+      currentA
+      mw
+      mvar
+      percentage
+      tap
+      note
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+// New API Functions
+export async function getClassifications(token: string): Promise<Classification[]> {
+  const data = await graphqlRequest<{ classifications: Classification[] }>(CLASSIFICATIONS_QUERY, {}, token);
+  return data.classifications;
+}
+
+export async function getUnitTypesByClassification(token: string, classificationId: number): Promise<UnitType[]> {
+  const data = await graphqlRequest<{ unitTypesByClassification: UnitType[] }>(
+    UNIT_TYPES_BY_CLASSIFICATION_QUERY,
+    { classificationId },
+    token
+  );
+  return data.unitTypesByClassification;
+}
+
+export async function getUnitsByUnitType(token: string, unitTypeId: number): Promise<NewUnit[]> {
+  const data = await graphqlRequest<{ unitsByUnitType: NewUnit[] }>(
+    UNITS_BY_UNIT_TYPE_QUERY,
+    { unitTypeId },
+    token
+  );
+  return data.unitsByUnitType;
+}
+
+export async function getBaysByUnit(token: string, unitId: number): Promise<NewBay[]> {
+  const data = await graphqlRequest<{ baysByUnit: NewBay[] }>(
+    BAYS_BY_UNIT_QUERY,
+    { unitId },
+    token
+  );
+  return data.baysByUnit;
+}
+
+export async function getBebanRecords(
+  token: string,
+  filters?: {
+    classificationId?: number;
+    unitTypeId?: number;
+    unitId?: number;
+    bayId?: number;
+    recordedAtFrom?: string;
+    recordedAtTo?: string;
+  }
+): Promise<BebanRecordWithRelations[]> {
+  const data = await graphqlRequest<{ bebanRecords: BebanRecordWithRelations[] }>(
+    BEBAN_RECORDS_QUERY,
+    filters || {},
+    token
+  );
+  return data.bebanRecords;
+}
+
+export async function createBebanRecord(token: string, input: CreateBebanRecordInput): Promise<BebanRecord> {
+  const data = await graphqlRequest<{ createBebanRecord: BebanRecord }>(
+    CREATE_BEBAN_RECORD_MUTATION,
+    { input },
+    token
+  );
+  return data.createBebanRecord;
+}

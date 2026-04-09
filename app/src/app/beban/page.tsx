@@ -9,10 +9,12 @@ import {
   getBays,
   getBebans,
   getUnits,
+  getUnitCategories,
   updateBeban,
   type Bay,
   type Beban,
   type Unit,
+  type UnitCategory,
 } from "@/shared/lib/api";
 import { useAppRouter } from "@/shared/lib/app-router";
 import { DashboardShell } from "@/shared/components/dashboard-shell";
@@ -37,11 +39,8 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/shared/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { cn } from "@/shared/lib/utils";
 
-type PrimaryTabKey = "gitet-500kv" | "gi-150-70-kv";
-type SecondaryTabKey = "penghantar-gitet" | "ibt-gitet" | "penghantar-gi" | "ibt-trafo-gi";
 type TimeSlot = "10:00" | "14:00" | "19:00";
 type NumericFieldKey = "tap" | "kV" | "ampere" | "mw" | "mvar" | "percentageIn";
 
@@ -58,24 +57,6 @@ type BebanFormState = {
 type DetailFormState = BebanFormState & {
   date: string;
 };
-
-type SectionConfig = {
-  key: SecondaryTabKey;
-  primaryTab: PrimaryTabKey;
-  label: string;
-};
-
-const primaryTabConfig: { key: PrimaryTabKey; label: string }[] = [
-  { key: "gitet-500kv", label: "GITET 500kV" },
-  { key: "gi-150-70-kv", label: "GI 150/70 kV" },
-];
-
-const sectionConfigs: SectionConfig[] = [
-  { key: "penghantar-gitet", primaryTab: "gitet-500kv", label: "Penghantar GITET" },
-  { key: "ibt-gitet", primaryTab: "gitet-500kv", label: "IBT GITET" },
-  { key: "penghantar-gi", primaryTab: "gi-150-70-kv", label: "Penghantar GI" },
-  { key: "ibt-trafo-gi", primaryTab: "gi-150-70-kv", label: "IBT/Trafo GI" },
-];
 
 const timeSlots: TimeSlot[] = ["10:00", "14:00", "19:00"];
 
@@ -144,70 +125,58 @@ function buildMeasuredAt(dateValue: string, time: TimeSlot) {
   return measuredDate.toISOString();
 }
 
-function getSectionsForPrimaryTab(primaryTab: PrimaryTabKey) {
-  return sectionConfigs.filter((config) => config.primaryTab === primaryTab);
-}
-
 export default function BebanPage() {
   const { token } = useAppRouter();
-  const [activePrimaryTab, setActivePrimaryTab] = React.useState<PrimaryTabKey>("gitet-500kv");
-  const [activeNestedTabs, setActiveNestedTabs] = React.useState<Record<PrimaryTabKey, SecondaryTabKey>>({
-    "gitet-500kv": "penghantar-gitet",
-    "gi-150-70-kv": "penghantar-gi",
-  });
-  const [selectedUnitIds, setSelectedUnitIds] = React.useState<Record<SecondaryTabKey, string>>({
-    "penghantar-gitet": "",
-    "ibt-gitet": "",
-    "penghantar-gi": "",
-    "ibt-trafo-gi": "",
-  });
-  const [selectedBayIds, setSelectedBayIds] = React.useState<Record<SecondaryTabKey, string>>({
-    "penghantar-gitet": "",
-    "ibt-gitet": "",
-    "penghantar-gi": "",
-    "ibt-trafo-gi": "",
-  });
-  const [selectedDates, setSelectedDates] = React.useState<Record<SecondaryTabKey, Date | undefined>>({
-    "penghantar-gitet": new Date(),
-    "ibt-gitet": new Date(),
-    "penghantar-gi": new Date(),
-    "ibt-trafo-gi": new Date(),
-  });
+  
+  // Dynamic category selection
+  const [categories, setCategories] = React.useState<UnitCategory[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = React.useState<string>("");
+  
+  // Unit selection based on category
+  const [selectedUnitId, setSelectedUnitId] = React.useState<string>("");
+  
+  // Bay selection
+  const [selectedBayId, setSelectedBayId] = React.useState<string>("");
+  const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(new Date());
+  
+  // Data
+  const [units, setUnits] = React.useState<Unit[]>([]);
+  const [bays, setBays] = React.useState<Bay[]>([]);
+  const [bebans, setBebans] = React.useState<Beban[]>([]);
+  
+  // UI state
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [formState, setFormState] = React.useState<BebanFormState>(createDefaultFormState());
   const [detailForm, setDetailForm] = React.useState<DetailFormState | null>(null);
   const [selectedItem, setSelectedItem] = React.useState<Beban | null>(null);
-  const [units, setUnits] = React.useState<Unit[]>([]);
-  const [bays, setBays] = React.useState<Bay[]>([]);
-  const [bebans, setBebans] = React.useState<Beban[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const activeSectionKey = activeNestedTabs[activePrimaryTab];
+  // Filtered data based on selections
+  const filteredUnits = React.useMemo(() => {
+    if (!selectedCategoryId) return [];
+    return units.filter((unit) => String(unit.categoryId) === selectedCategoryId);
+  }, [units, selectedCategoryId]);
 
-  const getUnitsBySection = React.useCallback(
-    (sectionKey: SecondaryTabKey) => units.filter((unit) => unit.categoryKey === sectionKey),
-    [units],
-  );
-
-  const getBaysBySection = React.useCallback(
-    (sectionKey: SecondaryTabKey) => {
-      const unitId = selectedUnitIds[sectionKey];
-      if (!unitId) {
-        return [];
-      }
-
-      return bays.filter((bay) => String(bay.unitId) === unitId);
-    },
-    [bays, selectedUnitIds],
-  );
+  const filteredBays = React.useMemo(() => {
+    if (!selectedUnitId) return [];
+    return bays.filter((bay) => String(bay.unitId) === selectedUnitId);
+  }, [bays, selectedUnitId]);
 
   const selectedBayName = React.useMemo(() => {
-    const bayId = selectedBayIds[activeSectionKey];
-    return bays.find((bay) => String(bay.id) === bayId)?.name ?? "";
-  }, [activeSectionKey, bays, selectedBayIds]);
+    return bays.find((bay) => String(bay.id) === selectedBayId)?.name ?? "";
+  }, [bays, selectedBayId]);
 
+  const selectedUnitName = React.useMemo(() => {
+    return units.find((unit) => String(unit.id) === selectedUnitId)?.name ?? "";
+  }, [units, selectedUnitId]);
+
+  const selectedCategoryName = React.useMemo(() => {
+    return categories.find((cat) => String(cat.id) === selectedCategoryId)?.name ?? "";
+  }, [categories, selectedCategoryId]);
+
+  // Load all data
   const loadData = React.useCallback(async () => {
     if (!token) {
       return;
@@ -216,11 +185,13 @@ export default function BebanPage() {
     setError(null);
     setIsLoading(true);
     try {
-      const [fetchedUnits, fetchedBays, fetchedBebans] = await Promise.all([
+      const [fetchedCategories, fetchedUnits, fetchedBays, fetchedBebans] = await Promise.all([
+        getUnitCategories(token),
         getUnits(token),
         getBays(token),
         getBebans(token),
       ]);
+      setCategories(fetchedCategories);
       setUnits(fetchedUnits);
       setBays(fetchedBays);
       setBebans(fetchedBebans);
@@ -237,55 +208,30 @@ export default function BebanPage() {
     void loadData();
   }, [loadData]);
 
+  // Reset downstream selections when category changes
   React.useEffect(() => {
-    setSelectedUnitIds((current) => {
-      let changed = false;
-      const next = { ...current };
+    setSelectedUnitId("");
+    setSelectedBayId("");
+  }, [selectedCategoryId]);
 
-      for (const section of sectionConfigs) {
-        const sectionUnits = getUnitsBySection(section.key);
-        if (sectionUnits.length === 0) {
-          if (next[section.key] !== "") {
-            next[section.key] = "";
-            changed = true;
-          }
-          continue;
-        }
-
-        if (!sectionUnits.some((item) => String(item.id) === next[section.key])) {
-          next[section.key] = String(sectionUnits[0].id);
-          changed = true;
-        }
-      }
-
-      return changed ? next : current;
-    });
-  }, [getUnitsBySection]);
-
+  // Reset bay selection when unit changes
   React.useEffect(() => {
-    setSelectedBayIds((current) => {
-      let changed = false;
-      const next = { ...current };
+    setSelectedBayId("");
+  }, [selectedUnitId]);
 
-      for (const section of sectionConfigs) {
-        const sectionBays = getBaysBySection(section.key);
-        if (sectionBays.length === 0) {
-          if (next[section.key] !== "") {
-            next[section.key] = "";
-            changed = true;
-          }
-          continue;
-        }
+  // Auto-select first unit when category changes and units are loaded
+  React.useEffect(() => {
+    if (filteredUnits.length > 0 && !selectedUnitId) {
+      setSelectedUnitId(String(filteredUnits[0].id));
+    }
+  }, [filteredUnits, selectedUnitId]);
 
-        if (!sectionBays.some((item) => String(item.id) === next[section.key])) {
-          next[section.key] = String(sectionBays[0].id);
-          changed = true;
-        }
-      }
-
-      return changed ? next : current;
-    });
-  }, [getBaysBySection]);
+  // Auto-select first bay when unit changes and bays are loaded
+  React.useEffect(() => {
+    if (filteredBays.length > 0 && !selectedBayId) {
+      setSelectedBayId(String(filteredBays[0].id));
+    }
+  }, [filteredBays, selectedBayId]);
 
   const updateFormField = (field: NumericFieldKey, value: string) => {
     setFormState((current) => ({ ...current, [field]: value }));
@@ -303,15 +249,12 @@ export default function BebanPage() {
       return;
     }
 
-    const selectedDate = selectedDates[activeSectionKey] ?? new Date();
-    const selectedBayId = selectedBayIds[activeSectionKey];
-
     if (!selectedBayId) {
       setError("Pilih bay terlebih dahulu");
       return;
     }
 
-    const dateKey = toDateKey(selectedDate);
+    const dateKey = toDateKey(selectedDate ?? new Date());
 
     setIsSaving(true);
     setError(null);
@@ -414,31 +357,25 @@ export default function BebanPage() {
     }
   };
 
-  const getFilteredBebanList = React.useCallback(
-    (sectionKey: SecondaryTabKey) => {
-      const selectedDate = selectedDates[sectionKey];
-      const selectedBayId = selectedBayIds[sectionKey];
+  const getFilteredBebanList = React.useCallback(() => {
+    if (!selectedDate || !selectedBayId) {
+      return [];
+    }
 
-      if (!selectedDate || !selectedBayId) {
-        return [];
+    const targetDateKey = toDateKey(selectedDate);
+    return bebans.filter((item) => {
+      if (item.bayId === null || String(item.bayId) !== selectedBayId) {
+        return false;
       }
 
-      const targetDateKey = toDateKey(selectedDate);
-      return bebans.filter((item) => {
-        if (item.bayId === null || String(item.bayId) !== selectedBayId) {
-          return false;
-        }
+      const measuredDate = getMeasuredDate(item.measuredAt);
+      return toDateKey(measuredDate) === targetDateKey;
+    });
+  }, [bebans, selectedBayId, selectedDate]);
 
-        const measuredDate = getMeasuredDate(item.measuredAt);
-        return toDateKey(measuredDate) === targetDateKey;
-      });
-    },
-    [bebans, selectedBayIds, selectedDates],
-  );
+  const filteredBebanList = getFilteredBebanList();
 
   const renderFormTrigger = () => {
-    const currentBayId = selectedBayIds[activeSectionKey];
-
     return (
       <Sheet
         open={isFormOpen}
@@ -453,7 +390,7 @@ export default function BebanPage() {
           type="button"
           className="w-full lg:w-auto"
           onClick={() => setIsFormOpen(true)}
-          disabled={!currentBayId}
+          disabled={!selectedBayId}
         >
           <PlusIcon />
           Add Beban
@@ -468,7 +405,7 @@ export default function BebanPage() {
                 <Label htmlFor="beban-date-display">Tanggal</Label>
                 <Input
                   id="beban-date-display"
-                  value={selectedDates[activeSectionKey] ? formatDate(selectedDates[activeSectionKey] as Date) : "-"}
+                  value={selectedDate ? formatDate(selectedDate) : "-"}
                   disabled
                 />
               </div>
@@ -581,111 +518,13 @@ export default function BebanPage() {
               <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSaving || !currentBayId}>
+              <Button type="submit" disabled={isSaving || !selectedBayId}>
                 {isSaving ? "Saving..." : "Save Beban"}
               </Button>
             </SheetFooter>
           </form>
         </SheetContent>
       </Sheet>
-    );
-  };
-
-  const renderSectionPanel = (section: SectionConfig) => {
-    const sectionUnits = getUnitsBySection(section.key);
-    const sectionBays = getBaysBySection(section.key);
-    const filteredList = getFilteredBebanList(section.key);
-
-    return (
-      <TabsContent key={section.key} value={section.key} className="mt-0">
-        <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
-          <Card>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Unit</p>
-                <Select
-                  value={selectedUnitIds[section.key]}
-                  onValueChange={(value) =>
-                    setSelectedUnitIds((current) => ({ ...current, [section.key]: value }))
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Pilih unit" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sectionUnits.map((unit) => (
-                      <SelectItem key={unit.id} value={String(unit.id)}>
-                        {unit.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Bay</p>
-                <Select
-                  value={selectedBayIds[section.key]}
-                  onValueChange={(value) =>
-                    setSelectedBayIds((current) => ({ ...current, [section.key]: value }))
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Pilih bay" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sectionBays.map((bay) => (
-                      <SelectItem key={bay.id} value={String(bay.id)}>
-                        {bay.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="space-y-4">
-              <Calendar
-                mode="single"
-                selected={selectedDates[section.key]}
-                onSelect={(value) => setSelectedDates((current) => ({ ...current, [section.key]: value }))}
-                className="w-full"
-              />
-              <div className="space-y-3 border-t pt-4">
-                <p className="text-sm font-medium">List Beban</p>
-                {filteredList.length > 0 ? (
-                  <div className="space-y-3">
-                    {filteredList.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className="flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors hover:bg-accent/40"
-                        onClick={() => openDetail(item)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline">{getMeasuredTimeSlot(item.measuredAt)}</Badge>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">{item.bayName ?? "-"}</span>
-                            <span className="text-xs text-muted-foreground">Tap to view detail</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">Percentage In</p>
-                          <p className="text-sm font-semibold">{item.percentage.toFixed(2)}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    Belum ada data untuk filter saat ini.
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </TabsContent>
     );
   };
 
@@ -700,49 +539,147 @@ export default function BebanPage() {
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </div>
 
-        <Tabs
-          value={activePrimaryTab}
-          onValueChange={(value) => setActivePrimaryTab(value as PrimaryTabKey)}
-          className="gap-4"
-        >
-          <TabsList className="w-full justify-start overflow-x-auto">
-            {primaryTabConfig.map((tab) => (
-              <TabsTrigger key={tab.key} value={tab.key} className="min-w-fit px-4">
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {primaryTabConfig.map((primaryTab) => {
-            const sections = getSectionsForPrimaryTab(primaryTab.key);
-            return (
-              <TabsContent key={primaryTab.key} value={primaryTab.key} className="mt-0 space-y-4">
-                <Tabs
-                  value={activeNestedTabs[primaryTab.key]}
-                  onValueChange={(value) =>
-                    setActiveNestedTabs((current) => ({
-                      ...current,
-                      [primaryTab.key]: value as SecondaryTabKey,
-                    }))
-                  }
-                  className="gap-4"
+        {/* Selection Panel */}
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            <div className="grid gap-4 lg:grid-cols-3">
+              {/* Category Dropdown */}
+              <div className="space-y-2">
+                <Label>Kategori</Label>
+                <Select
+                  value={selectedCategoryId}
+                  onValueChange={setSelectedCategoryId}
                 >
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <TabsList className="w-full justify-start overflow-x-auto lg:w-auto">
-                      {sections.map((section) => (
-                        <TabsTrigger key={section.key} value={section.key} className="min-w-fit px-4">
-                          {section.label}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                    {renderFormTrigger()}
-                  </div>
-                  {sections.map((section) => renderSectionPanel(section))}
-                </Tabs>
-              </TabsContent>
-            );
-          })}
-        </Tabs>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih kategori" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={String(category.id)}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Unit Dropdown */}
+              <div className="space-y-2">
+                <Label>Unit</Label>
+                <Select
+                  value={selectedUnitId}
+                  onValueChange={setSelectedUnitId}
+                  disabled={!selectedCategoryId || filteredUnits.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={selectedCategoryId ? "Pilih unit" : "Pilih kategori dulu"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredUnits.map((unit) => (
+                      <SelectItem key={unit.id} value={String(unit.id)}>
+                        {unit.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Bay Dropdown */}
+              <div className="space-y-2">
+                <Label>Bay</Label>
+                <Select
+                  value={selectedBayId}
+                  onValueChange={setSelectedBayId}
+                  disabled={!selectedUnitId || filteredBays.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={selectedUnitId ? "Pilih bay" : "Pilih unit dulu"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredBays.map((bay) => (
+                      <SelectItem key={bay.id} value={String(bay.id)}>
+                        {bay.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Selected Info */}
+            {selectedCategoryId && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span>Kategori: <strong className="text-foreground">{selectedCategoryName}</strong></span>
+                {selectedUnitId && (
+                  <>
+                    <span>•</span>
+                    <span>Unit: <strong className="text-foreground">{selectedUnitName}</strong></span>
+                  </>
+                )}
+                {selectedBayId && (
+                  <>
+                    <span>•</span>
+                    <span>Bay: <strong className="text-foreground">{selectedBayName}</strong></span>
+                  </>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Main Content */}
+        <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
+          <Card>
+            <CardContent className="space-y-4">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={setSelectedDate}
+                className="w-full"
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">List Beban</p>
+                {renderFormTrigger()}
+              </div>
+              
+              {filteredBebanList.length > 0 ? (
+                <div className="space-y-3">
+                  {filteredBebanList.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors hover:bg-accent/40"
+                      onClick={() => openDetail(item)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline">{getMeasuredTimeSlot(item.measuredAt)}</Badge>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">{item.bayName ?? "-"}</span>
+                          <span className="text-xs text-muted-foreground">Tap to view detail</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Percentage In</p>
+                        <p className="text-sm font-semibold">{item.percentage.toFixed(2)}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  {!selectedBayId 
+                    ? "Pilih kategori, unit, dan bay terlebih dahulu." 
+                    : "Belum ada data untuk filter saat ini."}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <Drawer

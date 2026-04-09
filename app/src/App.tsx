@@ -162,6 +162,7 @@ export default function App() {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
+  // Background session sync - validates token periodically but doesn't block UI
   React.useEffect(() => {
     if (!token) {
       setIsSessionSyncing(false);
@@ -169,7 +170,12 @@ export default function App() {
     }
 
     let cancelled = false;
-    setIsSessionSyncing(true);
+    
+    // Only show syncing state on initial app load (when user data not in memory yet)
+    const shouldBlockNavigation = currentUser === null;
+    if (shouldBlockNavigation) {
+      setIsSessionSyncing(true);
+    }
 
     const syncSession = async () => {
       try {
@@ -185,12 +191,17 @@ export default function App() {
           return;
         }
 
-        window.localStorage.removeItem(JWT_STORAGE_KEY);
-        window.localStorage.removeItem(USER_STORAGE_KEY);
-        window.localStorage.removeItem(AUTH_STORAGE_KEY);
-        setToken(null);
-        setCurrentUser(null);
-        commitNavigation("/auth/signin", true);
+        // Only logout if we're not in the middle of a fresh login
+        // This prevents race conditions during sign in
+        const storedToken = window.localStorage.getItem(JWT_STORAGE_KEY);
+        if (storedToken === token) {
+          window.localStorage.removeItem(JWT_STORAGE_KEY);
+          window.localStorage.removeItem(USER_STORAGE_KEY);
+          window.localStorage.removeItem(AUTH_STORAGE_KEY);
+          setToken(null);
+          setCurrentUser(null);
+          commitNavigation("/auth/signin", true);
+        }
       } finally {
         if (!cancelled) {
           setIsSessionSyncing(false);
@@ -198,6 +209,7 @@ export default function App() {
       }
     };
 
+    // Run sync in background - don't block user interaction
     void syncSession();
 
     return () => {
@@ -214,16 +226,22 @@ export default function App() {
 
   const signIn = React.useCallback(
     (session: AuthSession) => {
+      // Save session immediately
       window.localStorage.setItem(JWT_STORAGE_KEY, session.token);
       window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
       window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
 
       setToken(session.token);
       setCurrentUser(session.user);
+      
+      // Mark session as synced since we have valid user data from login
+      // This prevents the route resolver from blocking navigation
+      setIsSessionSyncing(false);
 
       const redirectPath = window.sessionStorage.getItem(REDIRECT_AFTER_LOGIN_KEY);
       window.sessionStorage.removeItem(REDIRECT_AFTER_LOGIN_KEY);
 
+      // Navigate immediately - don't wait for background sync
       if (redirectPath && !PUBLIC_ROUTES.has(redirectPath)) {
         commitNavigation(redirectPath, true);
         return;
