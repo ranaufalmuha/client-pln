@@ -1,4 +1,5 @@
 use sqlx::PgPool;
+use sqlx::Row;
 use crate::models::classification::{Classification, ClassificationWithTypeCount, CreateClassificationInput, UpdateClassificationInput};
 
 pub struct ClassificationRepository;
@@ -7,7 +8,7 @@ impl ClassificationRepository {
     pub async fn find_all(pool: &PgPool) -> Result<Vec<Classification>, sqlx::Error> {
         sqlx::query_as::<_, Classification>(
             "
-            SELECT id, code, name, created_at, updated_at
+            SELECT id, name, created_at, updated_at
             FROM classifications
             ORDER BY name ASC
             "
@@ -17,29 +18,34 @@ impl ClassificationRepository {
     }
 
     pub async fn find_all_with_counts(pool: &PgPool) -> Result<Vec<ClassificationWithTypeCount>, sqlx::Error> {
-        sqlx::query_as::<_, ClassificationWithTypeCount>(
-            "
+        let rows = sqlx::query("
             SELECT 
                 c.id, 
-                c.code, 
                 c.name, 
                 c.created_at, 
                 c.updated_at,
                 COUNT(ut.id) as unit_type_count
             FROM classifications c
             LEFT JOIN unit_types ut ON ut.classification_id = c.id
-            GROUP BY c.id, c.code, c.name, c.created_at, c.updated_at
+            GROUP BY c.id, c.name, c.created_at, c.updated_at
             ORDER BY c.name ASC
-            "
-        )
+        ")
         .fetch_all(pool)
-        .await
+        .await?;
+
+        Ok(rows.into_iter().map(|row| ClassificationWithTypeCount {
+            id: row.try_get("id").unwrap_or(0),
+            name: row.try_get("name").unwrap_or_default(),
+            unit_type_count: row.try_get("unit_type_count").unwrap_or(0),
+            created_at: row.try_get("created_at").unwrap_or_else(|_| chrono::Utc::now()),
+            updated_at: row.try_get("updated_at").unwrap_or_else(|_| chrono::Utc::now()),
+        }).collect())
     }
 
     pub async fn find_by_id(pool: &PgPool, id: i32) -> Result<Classification, sqlx::Error> {
         sqlx::query_as::<_, Classification>(
             "
-            SELECT id, code, name, created_at, updated_at
+            SELECT id, name, created_at, updated_at
             FROM classifications
             WHERE id = $1
             "
@@ -49,15 +55,15 @@ impl ClassificationRepository {
         .await
     }
 
-    pub async fn find_by_code(pool: &PgPool, code: &str) -> Result<Option<Classification>, sqlx::Error> {
+    pub async fn find_by_name(pool: &PgPool, name: &str) -> Result<Option<Classification>, sqlx::Error> {
         sqlx::query_as::<_, Classification>(
             "
-            SELECT id, code, name, created_at, updated_at
+            SELECT id, name, created_at, updated_at
             FROM classifications
-            WHERE code = $1
+            WHERE name = $1
             "
         )
-        .bind(code)
+        .bind(name)
         .fetch_optional(pool)
         .await
     }
@@ -65,12 +71,11 @@ impl ClassificationRepository {
     pub async fn create(pool: &PgPool, input: CreateClassificationInput) -> Result<Classification, sqlx::Error> {
         sqlx::query_as::<_, Classification>(
             "
-            INSERT INTO classifications (code, name)
-            VALUES ($1, $2)
-            RETURNING id, code, name, created_at, updated_at
+            INSERT INTO classifications (name)
+            VALUES ($1)
+            RETURNING id, name, created_at, updated_at
             "
         )
-        .bind(input.code)
         .bind(input.name)
         .fetch_one(pool)
         .await
@@ -81,15 +86,13 @@ impl ClassificationRepository {
             "
             UPDATE classifications
             SET 
-                code = COALESCE($2, code),
-                name = COALESCE($3, name),
+                name = COALESCE($2, name),
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, code, name, created_at, updated_at
+            RETURNING id, name, created_at, updated_at
             "
         )
         .bind(input.id)
-        .bind(input.code)
         .bind(input.name)
         .fetch_one(pool)
         .await

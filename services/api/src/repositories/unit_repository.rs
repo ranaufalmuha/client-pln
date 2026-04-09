@@ -1,4 +1,5 @@
 use sqlx::PgPool;
+use sqlx::Row;
 use crate::models::unit::{Unit, UnitWithRelations, CreateUnitInput, UpdateUnitInput};
 use crate::models::unit::{UnitLegacy, CreateUnitInputLegacy, UpdateUnitInputLegacy};
 
@@ -7,17 +8,13 @@ pub struct UnitRepository;
 impl UnitRepository {
     // New schema methods
     pub async fn find_all(pool: &PgPool) -> Result<Vec<UnitWithRelations>, sqlx::Error> {
-        sqlx::query_as::<_, UnitWithRelations>(
-            "
+        let rows = sqlx::query("
             SELECT 
                 u.id, 
                 u.unit_type_id,
-                ut.code as unit_type_code,
                 ut.name as unit_type_name,
                 c.id as classification_id,
-                c.code as classification_code,
                 c.name as classification_name,
-                u.code, 
                 u.name, 
                 u.created_at, 
                 u.updated_at,
@@ -26,18 +23,29 @@ impl UnitRepository {
             JOIN unit_types ut ON ut.id = u.unit_type_id
             JOIN classifications c ON c.id = ut.classification_id
             LEFT JOIN bays b ON b.unit_id = u.id
-            GROUP BY u.id, u.unit_type_id, ut.code, ut.name, c.id, c.code, c.name, u.code, u.name, u.created_at, u.updated_at
+            GROUP BY u.id, u.unit_type_id, ut.name, c.id, c.name, u.name, u.created_at, u.updated_at
             ORDER BY c.name ASC, ut.name ASC, u.name ASC
-            "
-        )
+        ")
         .fetch_all(pool)
-        .await
+        .await?;
+
+        Ok(rows.into_iter().map(|row| UnitWithRelations {
+            id: row.try_get("id").unwrap_or(0),
+            unit_type_id: row.try_get("unit_type_id").unwrap_or(0),
+            unit_type_name: row.try_get("unit_type_name").unwrap_or_default(),
+            classification_id: row.try_get("classification_id").unwrap_or(0),
+            classification_name: row.try_get("classification_name").unwrap_or_default(),
+            name: row.try_get("name").unwrap_or_default(),
+            bay_count: row.try_get("bay_count").unwrap_or(0),
+            created_at: row.try_get("created_at").unwrap_or_else(|_| chrono::Utc::now()),
+            updated_at: row.try_get("updated_at").unwrap_or_else(|_| chrono::Utc::now()),
+        }).collect())
     }
 
     pub async fn find_by_unit_type(pool: &PgPool, unit_type_id: i32) -> Result<Vec<Unit>, sqlx::Error> {
         sqlx::query_as::<_, Unit>(
             "
-            SELECT id, unit_type_id, code, name, created_at, updated_at
+            SELECT id, unit_type_id, name, created_at, updated_at
             FROM units
             WHERE unit_type_id = $1
             ORDER BY name ASC
@@ -49,17 +57,13 @@ impl UnitRepository {
     }
 
     pub async fn find_by_id(pool: &PgPool, id: i32) -> Result<UnitWithRelations, sqlx::Error> {
-        sqlx::query_as::<_, UnitWithRelations>(
-            "
+        let row = sqlx::query("
             SELECT 
                 u.id, 
                 u.unit_type_id,
-                ut.code as unit_type_code,
                 ut.name as unit_type_name,
                 c.id as classification_id,
-                c.code as classification_code,
                 c.name as classification_name,
-                u.code, 
                 u.name, 
                 u.created_at, 
                 u.updated_at,
@@ -69,24 +73,34 @@ impl UnitRepository {
             JOIN classifications c ON c.id = ut.classification_id
             LEFT JOIN bays b ON b.unit_id = u.id
             WHERE u.id = $1
-            GROUP BY u.id, u.unit_type_id, ut.code, ut.name, c.id, c.code, c.name, u.code, u.name, u.created_at, u.updated_at
-            "
-        )
+            GROUP BY u.id, u.unit_type_id, ut.name, c.id, c.name, u.name, u.created_at, u.updated_at
+        ")
         .bind(id)
         .fetch_one(pool)
-        .await
+        .await?;
+
+        Ok(UnitWithRelations {
+            id: row.try_get("id").unwrap_or(0),
+            unit_type_id: row.try_get("unit_type_id").unwrap_or(0),
+            unit_type_name: row.try_get("unit_type_name").unwrap_or_default(),
+            classification_id: row.try_get("classification_id").unwrap_or(0),
+            classification_name: row.try_get("classification_name").unwrap_or_default(),
+            name: row.try_get("name").unwrap_or_default(),
+            bay_count: row.try_get("bay_count").unwrap_or(0),
+            created_at: row.try_get("created_at").unwrap_or_else(|_| chrono::Utc::now()),
+            updated_at: row.try_get("updated_at").unwrap_or_else(|_| chrono::Utc::now()),
+        })
     }
 
     pub async fn create(pool: &PgPool, input: CreateUnitInput) -> Result<Unit, sqlx::Error> {
         sqlx::query_as::<_, Unit>(
             "
-            INSERT INTO units (unit_type_id, code, name)
-            VALUES ($1, $2, $3)
-            RETURNING id, unit_type_id, code, name, created_at, updated_at
+            INSERT INTO units (unit_type_id, name)
+            VALUES ($1, $2)
+            RETURNING id, unit_type_id, name, created_at, updated_at
             "
         )
         .bind(input.unit_type_id)
-        .bind(input.code)
         .bind(input.name)
         .fetch_one(pool)
         .await
@@ -98,16 +112,14 @@ impl UnitRepository {
             UPDATE units
             SET 
                 unit_type_id = COALESCE($2, unit_type_id),
-                code = COALESCE($3, code),
-                name = COALESCE($4, name),
+                name = COALESCE($3, name),
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, unit_type_id, code, name, created_at, updated_at
+            RETURNING id, unit_type_id, name, created_at, updated_at
             "
         )
         .bind(input.id)
         .bind(input.unit_type_id)
-        .bind(input.code)
         .bind(input.name)
         .fetch_one(pool)
         .await
@@ -141,7 +153,7 @@ impl UnitRepository {
                 u.id,
                 u.name,
                 ut.id AS category_id,
-                ut.code AS category_key,
+                ut.name AS category_key,
                 ut.name AS category_name
             FROM units u
             JOIN unit_types ut ON ut.id = u.unit_type_id
@@ -156,15 +168,15 @@ impl UnitRepository {
         sqlx::query_as::<_, UnitLegacy>(
             "
             WITH inserted AS (
-                INSERT INTO units (name, unit_type_id, code)
-                VALUES ($1, $2, NULL)
+                INSERT INTO units (name, unit_type_id)
+                VALUES ($1, $2)
                 RETURNING id, name, unit_type_id
             )
             SELECT
                 inserted.id,
                 inserted.name,
                 ut.id AS category_id,
-                ut.code AS category_key,
+                ut.name AS category_key,
                 ut.name AS category_name
             FROM inserted
             JOIN unit_types ut ON ut.id = inserted.unit_type_id

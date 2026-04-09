@@ -10,13 +10,7 @@ use crate::models::classification::{Classification, CreateClassificationInput, U
 use crate::models::unit_type::{UnitType, CreateUnitTypeInput, UpdateUnitTypeInput};
 use crate::models::unit::{Unit, UnitWithRelations, CreateUnitInput, UpdateUnitInput};
 use crate::models::bay::{Bay, BayWithRelations, CreateBayInput, UpdateBayInput};
-use crate::models::beban_record::{BebanRecord, BebanRecordWithRelations, CreateBebanRecordInput, UpdateBebanRecordInput};
-
-// Legacy models for backward compatibility
-use crate::models::bay::{BayLegacy, CreateBayInputLegacy, UpdateBayInputLegacy};
-use crate::models::unit::{UnitLegacy, CreateUnitInputLegacy, UpdateUnitInputLegacy};
-use crate::models::beban_record::{BebanLegacy, CreateBebanInputLegacy, UpdateBebanInputLegacy};
-use crate::models::unit_category::{CreateUnitCategoryInput, UnitCategory, UpdateUnitCategoryInput};
+use crate::models::beban_record::{BebanRecord, CreateBebanRecordInput, UpdateBebanRecordInput};
 use crate::models::user::{AdminCreateUserInput, AdminUpdateUserInput, AuthPayload, CreateUserInput, User};
 
 // New repositories
@@ -26,10 +20,7 @@ use crate::repositories::unit_repository::UnitRepository;
 use crate::repositories::bay_repository::BayRepository;
 use crate::repositories::beban_record_repository::BebanRecordRepository;
 
-// Legacy repositories
-use crate::repositories::unit_category_repository::UnitCategoryRepository;
 use crate::repositories::user_repository::UserRepository;
-use crate::repositories::beban_repository::BebanRepository;
 
 pub struct MutationRoot;
 
@@ -297,61 +288,4 @@ impl MutationRoot {
         Ok(BebanRecordRepository::delete(pool, id).await?)
     }
 
-    // Legacy mutations for backward compatibility
-    async fn create_unit_category(
-        &self,
-        ctx: &Context<'_>,
-        input: CreateUnitCategoryInput,
-    ) -> async_graphql::Result<UnitCategory> {
-        let _ = require_admin(ctx).await?;
-        let pool = ctx.data::<PgPool>()?;
-        Ok(UnitCategoryRepository::create(pool, input).await?)
-    }
-
-    async fn update_unit_category(
-        &self,
-        ctx: &Context<'_>,
-        input: UpdateUnitCategoryInput,
-    ) -> async_graphql::Result<UnitCategory> {
-        let _ = require_admin(ctx).await?;
-        let pool = ctx.data::<PgPool>()?;
-        Ok(UnitCategoryRepository::update(pool, input).await?)
-    }
-
-    async fn delete_unit_category(
-        &self,
-        ctx: &Context<'_>,
-        id: i32,
-    ) -> async_graphql::Result<bool> {
-        let _ = require_admin(ctx).await?;
-        let pool = ctx.data::<PgPool>()?;
-        Ok(UnitCategoryRepository::delete(pool, id).await?)
-    }
-
-    // Legacy create_beban for compatibility
-    async fn create_beban(
-        &self,
-        ctx: &Context<'_>,
-        input: CreateBebanInputLegacy,
-    ) -> async_graphql::Result<BebanLegacy> {
-        let _ = require_auth(ctx)?;
-        let pool = ctx.data::<PgPool>()?;
-        Ok(BebanRepository::create(pool, input).await?)
-    }
-
-    async fn update_beban(
-        &self,
-        ctx: &Context<'_>,
-        input: UpdateBebanInputLegacy,
-    ) -> async_graphql::Result<BebanLegacy> {
-        let _ = require_auth(ctx)?;
-        let pool = ctx.data::<PgPool>()?;
-        Ok(BebanRepository::update(pool, input).await?)
-    }
-
-    async fn delete_beban(&self, ctx: &Context<'_>, id: i32) -> async_graphql::Result<bool> {
-        let _ = require_auth(ctx)?;
-        let pool = ctx.data::<PgPool>()?;
-        Ok(BebanRepository::delete(pool, id).await?)
-    }
 }

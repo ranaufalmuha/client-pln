@@ -6,10 +6,7 @@ use crate::models::classification::{Classification, ClassificationWithTypeCount}
 use crate::models::unit_type::{UnitType, UnitTypeWithRelations};
 use crate::models::unit::{Unit, UnitWithRelations};
 use crate::models::bay::{Bay, BayWithRelations};
-use crate::models::beban_record::{BebanRecord, BebanRecordWithRelations, BebanRecordFilter};
-use crate::models::bay::BayLegacy;
-use crate::models::unit::UnitLegacy;
-use crate::models::beban_record::BebanLegacy;
+use crate::models::beban_record::{BebanRecordWithRelations, BebanRecordFilter};
 use crate::models::user::User;
 use crate::repositories::classification_repository::ClassificationRepository;
 use crate::repositories::unit_type_repository::UnitTypeRepository;
@@ -171,27 +168,4 @@ impl QueryRoot {
         Ok(BebanRecordRepository::find_by_id(pool, id).await?)
     }
 
-    // Legacy compatibility queries
-    async fn unit_categories(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<crate::models::unit_category::UnitCategory>> {
-        let _ = require_auth(ctx)?;
-        let pool = ctx.data::<PgPool>()?;
-        Ok(crate::repositories::unit_category_repository::UnitCategoryRepository::find_all(pool).await?)
-    }
-
-    async fn bebans(
-        &self,
-        ctx: &Context<'_>,
-        limit: Option<i64>,
-        offset: Option<i64>,
-    ) -> async_graphql::Result<Vec<BebanLegacy>> {
-        let _ = require_auth(ctx)?;
-        let pool = ctx.data::<PgPool>()?;
-        Ok(crate::repositories::beban_repository::BebanRepository::find_all(pool, limit, offset).await?)
-    }
-
-    async fn bebans_count(&self, ctx: &Context<'_>) -> async_graphql::Result<i64> {
-        let _ = require_auth(ctx)?;
-        let pool = ctx.data::<PgPool>()?;
-        Ok(crate::repositories::beban_repository::BebanRepository::count_all(pool).await?)
-    }
 }

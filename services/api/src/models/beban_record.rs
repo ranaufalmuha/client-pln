@@ -18,22 +18,18 @@ pub struct BebanRecord {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(SimpleObject, FromRow, Debug, Clone)]
+#[derive(SimpleObject, Debug, Clone)]
 pub struct BebanRecordWithRelations {
     pub id: i32,
     pub user_id: i32,
     pub user_email: String,
     pub bay_id: i32,
-    pub bay_code: Option<String>,
     pub bay_name: String,
     pub unit_id: i32,
-    pub unit_code: Option<String>,
     pub unit_name: String,
     pub unit_type_id: i32,
-    pub unit_type_code: String,
     pub unit_type_name: String,
     pub classification_id: i32,
-    pub classification_code: String,
     pub classification_name: String,
     pub recorded_at: chrono::DateTime<chrono::Utc>,
     pub kv: f64,
