@@ -38,7 +38,7 @@ impl BebanRecordRepository {
             WHERE 1=1
         ");
 
-        let mut binds: Vec<i32> = vec![];
+        let mut _binds: Vec<i32> = vec![];
         
         if let Some(ref f) = filter {
             if f.classification_id.is_some() {
@@ -225,12 +225,5 @@ impl BebanRecordRepository {
             .await?;
         
         Ok(result.rows_affected() > 0)
-    }
-
-    pub async fn count_by_bay(pool: &PgPool, bay_id: i32) -> Result<i64, sqlx::Error> {
-        sqlx::query_scalar("SELECT COUNT(*) FROM beban_records WHERE bay_id = $1")
-            .bind(bay_id)
-            .fetch_one(pool)
-            .await
     }
 }

@@ -55,19 +55,6 @@ impl ClassificationRepository {
         .await
     }
 
-    pub async fn find_by_name(pool: &PgPool, name: &str) -> Result<Option<Classification>, sqlx::Error> {
-        sqlx::query_as::<_, Classification>(
-            "
-            SELECT id, name, created_at, updated_at
-            FROM classifications
-            WHERE name = $1
-            "
-        )
-        .bind(name)
-        .fetch_optional(pool)
-        .await
-    }
-
     pub async fn create(pool: &PgPool, input: CreateClassificationInput) -> Result<Classification, sqlx::Error> {
         sqlx::query_as::<_, Classification>(
             "

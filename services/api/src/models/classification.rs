@@ -18,24 +18,6 @@ pub struct ClassificationWithTypeCount {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-impl ClassificationWithTypeCount {
-    pub fn new(
-        id: i32,
-        name: String,
-        unit_type_count: i64,
-        created_at: chrono::DateTime<chrono::Utc>,
-        updated_at: chrono::DateTime<chrono::Utc>,
-    ) -> Self {
-        Self {
-            id,
-            name,
-            unit_type_count,
-            created_at,
-            updated_at,
-        }
-    }
-}
-
 #[derive(InputObject, Debug, Clone)]
 pub struct CreateClassificationInput {
     pub name: String,

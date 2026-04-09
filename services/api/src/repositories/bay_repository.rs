@@ -1,7 +1,6 @@
 use sqlx::PgPool;
 use sqlx::Row;
 use crate::models::bay::{Bay, BayWithRelations, CreateBayInput, UpdateBayInput};
-use crate::models::bay::{BayLegacy, CreateBayInputLegacy, UpdateBayInputLegacy};
 
 pub struct BayRepository;
 
@@ -153,56 +152,5 @@ impl BayRepository {
         .await?;
         
         Ok(count > 0)
-    }
-
-    // Legacy compatibility methods
-    pub async fn find_all_legacy(pool: &PgPool, unit_id: Option<i32>) -> Result<Vec<BayLegacy>, sqlx::Error> {
-        sqlx::query_as::<_, BayLegacy>(
-            "
-            SELECT
-                b.id,
-                b.unit_id,
-                u.name AS unit_name,
-                ut.id AS unit_category_id,
-                ut.name AS unit_category_key,
-                ut.name AS unit_category_name,
-                b.name
-            FROM bays b
-            JOIN units u ON u.id = b.unit_id
-            JOIN unit_types ut ON ut.id = u.unit_type_id
-            WHERE ($1::INT IS NULL OR b.unit_id = $1)
-            ORDER BY ut.name, u.name, b.name
-            "
-        )
-        .bind(unit_id)
-        .fetch_all(pool)
-        .await
-    }
-
-    pub async fn create_legacy(pool: &PgPool, input: CreateBayInputLegacy) -> Result<BayLegacy, sqlx::Error> {
-        sqlx::query_as::<_, BayLegacy>(
-            "
-            WITH inserted AS (
-                INSERT INTO bays (unit_id, name)
-                VALUES ($1, $2)
-                RETURNING id, unit_id, name
-            )
-            SELECT
-                inserted.id,
-                inserted.unit_id,
-                u.name AS unit_name,
-                ut.id AS unit_category_id,
-                ut.name AS unit_category_key,
-                ut.name AS unit_category_name,
-                inserted.name
-            FROM inserted
-            JOIN units u ON u.id = inserted.unit_id
-            JOIN unit_types ut ON ut.id = u.unit_type_id
-            "
-        )
-        .bind(input.unit_id)
-        .bind(input.name)
-        .fetch_one(pool)
-        .await
     }
 }

@@ -1,5 +1,4 @@
 use async_graphql::{InputObject, SimpleObject};
-use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(SimpleObject, FromRow, Debug, Clone)]
@@ -35,27 +34,4 @@ pub struct UpdateUnitInput {
     pub id: i32,
     pub unit_type_id: Option<i32>,
     pub name: Option<String>,
-}
-
-// Legacy types for backward compatibility
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, SimpleObject)]
-pub struct UnitLegacy {
-    pub id: i32,
-    pub name: String,
-    pub category_id: i32,
-    pub category_key: String,
-    pub category_name: String,
-}
-
-#[derive(InputObject)]
-pub struct CreateUnitInputLegacy {
-    pub name: String,
-    pub category_id: i32,
-}
-
-#[derive(InputObject)]
-pub struct UpdateUnitInputLegacy {
-    pub id: i32,
-    pub name: Option<String>,
-    pub category_id: Option<i32>,
 }

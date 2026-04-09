@@ -1,7 +1,6 @@
 use sqlx::PgPool;
 use sqlx::Row;
 use crate::models::unit::{Unit, UnitWithRelations, CreateUnitInput, UpdateUnitInput};
-use crate::models::unit::{UnitLegacy, CreateUnitInputLegacy, UpdateUnitInputLegacy};
 
 pub struct UnitRepository;
 
@@ -143,48 +142,5 @@ impl UnitRepository {
         .await?;
         
         Ok(count > 0)
-    }
-
-    // Legacy compatibility methods
-    pub async fn find_all_legacy(pool: &PgPool) -> Result<Vec<UnitLegacy>, sqlx::Error> {
-        sqlx::query_as::<_, UnitLegacy>(
-            "
-            SELECT
-                u.id,
-                u.name,
-                ut.id AS category_id,
-                ut.name AS category_key,
-                ut.name AS category_name
-            FROM units u
-            JOIN unit_types ut ON ut.id = u.unit_type_id
-            ORDER BY ut.name, u.name
-            "
-        )
-        .fetch_all(pool)
-        .await
-    }
-
-    pub async fn create_legacy(pool: &PgPool, input: CreateUnitInputLegacy) -> Result<UnitLegacy, sqlx::Error> {
-        sqlx::query_as::<_, UnitLegacy>(
-            "
-            WITH inserted AS (
-                INSERT INTO units (name, unit_type_id)
-                VALUES ($1, $2)
-                RETURNING id, name, unit_type_id
-            )
-            SELECT
-                inserted.id,
-                inserted.name,
-                ut.id AS category_id,
-                ut.name AS category_key,
-                ut.name AS category_name
-            FROM inserted
-            JOIN unit_types ut ON ut.id = inserted.unit_type_id
-            "
-        )
-        .bind(input.name)
-        .bind(input.category_id)
-        .fetch_one(pool)
-        .await
     }
 }
